@@ -121,7 +121,7 @@ public class DiscordBot {
 	private boolean commandAllowed(String command, User user) {
 		//@formatter:off
 		return (!user.isBot() && commands.get(command) != null) &&
-				(settings.getStringSet(DiscordViewFactory.SETTING_DISCORD_USERTAG).contains(user.getAsTag()) || 
+				(settings.getStringSet(DiscordViewFactory.SETTING_DISCORD_USERTAG).contains(user.getName()) ||
 				!settings.getStringSet(DiscordViewFactory.SETTING_MODES).contains("dnd") && !commands.get(command).adminOnly());
 		//@formatter:on
 	}
