@@ -31,7 +31,7 @@
 		<dependency>
 			<groupId>net.dv8tion</groupId>
 			<artifactId>JDA</artifactId>
-			<version>5.0.0-beta.19</version>
+			<version>5.0.0-beta.20</version>
 		</dependency>
 		
 	</dependencies>
@@ -58,7 +58,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
-				<version>3.5.1</version>
+				<version>3.5.2</version>
 				<configuration>
 					<createDependencyReducedPom>false</createDependencyReducedPom>
 				</configuration>
