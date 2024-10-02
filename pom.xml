@@ -84,6 +84,7 @@
 									<include>com.fasterxml.jackson.core:jackson-databind</include>
 									<include>org.jetbrains.kotlin:kotlin-stdlib</include>
 									<include>com.squareup.okio:okio-jvm</include>
+									<include>net.sf.trove4j:core</include>
 								</includes>
 							</artifactSet>
 						</configuration>
