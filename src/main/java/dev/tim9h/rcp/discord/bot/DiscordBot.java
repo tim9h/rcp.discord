@@ -45,7 +45,7 @@ public class DiscordBot {
 		return CompletableFuture.supplyAsync(() -> {
 			if (client == null) {
 				var token = settings.getString(DiscordViewFactory.SETTING_TOKEN);
-				client = JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES)
+				client = JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
 						.build();
 				logger.info(() -> "Discord bot connected");
 				onBotConnected();
@@ -119,11 +119,10 @@ public class DiscordBot {
 	}
 
 	private boolean commandAllowed(String command, User user) {
-		//@formatter:off
-		return (!user.isBot() && commands.get(command) != null) &&
+		var com = command.split(StringUtils.SPACE)[0];
+		return (commands.get(com) != null) &&
 				(settings.getStringSet(DiscordViewFactory.SETTING_DISCORD_USERTAG).contains(user.getName()) ||
 				!settings.getStringSet(DiscordViewFactory.SETTING_MODES).contains("dnd") && !commands.get(command).adminOnly());
-		//@formatter:on
 	}
 
 	public void updateCommands() {
