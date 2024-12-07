@@ -87,7 +87,7 @@ public class DiscordView implements CCard {
 	}
 
 	private void registerBotCommands() {
-		bot.addCommand("logiled", new BotCommand((channel, args) -> {
+		bot.addCommand("logiled", new BotCommand((_, args) -> {
 			logger.info(() -> "Discord: Logiled");
 			if (!settings.getStringSet(DiscordViewFactory.SETTING_MODES).contains("alert")) {
 				eventManager.post(new CcEvent("LOGILED", args));
@@ -98,43 +98,43 @@ public class DiscordView implements CCard {
 		}, "Sets the lighting of Logitech periphery",
 				Arrays.asList(new OptionData(OptionType.STRING, "color", "name/hex/rgb", true))));
 
-		bot.addCommand("next", new BotCommand((channel, args) -> {
+		bot.addCommand("next", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Next song");
 			eventManager.post(new CcEvent("next"));
 			return true;
 		}, "Plays next song"));
 
-		bot.addCommand("previous", new BotCommand((channel, args) -> {
+		bot.addCommand("previous", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Previous song");
 			eventManager.post(new CcEvent("previous"));
 			return true;
 		}, "Plays previous song"));
 
-		bot.addCommand("play", new BotCommand((channel, args) -> {
+		bot.addCommand("play", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Play/pause");
 			eventManager.post(new CcEvent("play"));
 			return true;
 		}, "Play/pause music"));
 
-		bot.addCommand("pause", new BotCommand((channel, args) -> {
+		bot.addCommand("pause", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Play/pause");
 			eventManager.post(new CcEvent("pause"));
 			return true;
 		}, "Play/pause music"));
 
-		bot.addCommand("stop", new BotCommand((channel, args) -> {
+		bot.addCommand("stop", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Stop");
 			eventManager.post(new CcEvent("stop"));
 			return true;
 		}, "Stops playing music"));
 
-		bot.addCommand("lock", new BotCommand((channel, args) -> {
+		bot.addCommand("lock", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Lock");
 			eventManager.post(new CcEvent("lock"));
 			return true;
 		}, "Lock workstation of host computer", true));
 
-		bot.addCommand("shutdown", new BotCommand((channel, args) -> {
+		bot.addCommand("shutdown", new BotCommand((_, args) -> {
 			logger.info(() -> "Discord: Shutdown");
 			eventManager.post(new CcEvent("shutdown", args));
 			return true;
