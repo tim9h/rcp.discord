@@ -68,7 +68,7 @@ public class DiscordView implements CCard {
 				if (loginSuccess.booleanValue()) {
 					onBotConnected();
 				} else {
-					eventManager.echoAsync("Unable to start Discord Bot");
+					eventManager.echo("Unable to start Discord Bot");
 				}
 			});
 		} else {
@@ -77,7 +77,7 @@ public class DiscordView implements CCard {
 	}
 
 	private void onBotConnected() {
-		eventManager.echoAsync("Discord bot started");
+		eventManager.echo("Discord bot started");
 		bot.sendMessage(channelName, "Hello there");
 
 		var modes = settings.getStringSet(DiscordViewFactory.SETTING_MODES);
