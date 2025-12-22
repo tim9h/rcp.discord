@@ -16,13 +16,13 @@ import dev.tim9h.rcp.event.CcEvent;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.settings.Settings;
-import dev.tim9h.rcp.spi.CCard;
 import dev.tim9h.rcp.spi.Mode;
+import dev.tim9h.rcp.spi.Plugin;
 import dev.tim9h.rcp.spi.TreeNode;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 
-public class DiscordView implements CCard {
+public class DiscordView implements Plugin {
 
 	@InjectLogger
 	private Logger logger;
@@ -51,7 +51,7 @@ public class DiscordView implements CCard {
 
 	@Override
 	public void initBus(EventManager em) {
-		CCard.super.initBus(eventManager);
+		Plugin.super.initBus(eventManager);
 		em.listen("LOGILED_LIGHTING_CHANGED", color -> bot.updatePresence(StringUtils.join(color)));
 	}
 

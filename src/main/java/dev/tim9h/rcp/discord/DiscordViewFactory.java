@@ -7,10 +7,10 @@ import org.apache.commons.lang3.StringUtils;
 
 import com.google.inject.Inject;
 
-import dev.tim9h.rcp.spi.CCard;
-import dev.tim9h.rcp.spi.CCardFactory;
+import dev.tim9h.rcp.spi.Plugin;
+import dev.tim9h.rcp.spi.PluginFactory;
 
-public class DiscordViewFactory implements CCardFactory {
+public class DiscordViewFactory implements PluginFactory {
 
 	public static final String SETTING_TOKEN = "discord.bot.token";
 
@@ -29,7 +29,7 @@ public class DiscordViewFactory implements CCardFactory {
 	}
 
 	@Override
-	public CCard createCCard() {
+	public Plugin create() {
 		return discordView;
 	}
 
