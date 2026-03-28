@@ -1,7 +1,9 @@
 package dev.tim9h.rcp.discord;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -24,6 +26,14 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 
 public class DiscordView implements Plugin {
 
+	public static final String SETTING_TOKEN = "discord.bot.token";
+
+	private static final String SETTING_CHANNEL = "discord.bot.notificationchannel";
+
+	public static final String SETTING_DISCORD_USERTAG = "discord.privileged.user.tag";
+
+	public static final String SETTING_MODES = "core.modes";
+
 	@InjectLogger
 	private Logger logger;
 
@@ -44,9 +54,14 @@ public class DiscordView implements Plugin {
 	}
 
 	@Override
+	public String getId() {
+		return "discord";
+	}
+
+	@Override
 	public void init() {
 		logger.info(() -> "Created DiscordView");
-		channelName = settings.getString(DiscordViewFactory.SETTING_CHANNEL);
+		channelName = settings.getString(SETTING_CHANNEL);
 	}
 
 	@Override
@@ -57,7 +72,7 @@ public class DiscordView implements Plugin {
 
 	@Override
 	public void onSettingsChanged() {
-		channelName = settings.getString(DiscordViewFactory.SETTING_CHANNEL);
+		channelName = settings.getString(SETTING_CHANNEL);
 	}
 
 	private void connectDiscordBot() {
@@ -80,7 +95,7 @@ public class DiscordView implements Plugin {
 		eventManager.echo("Discord bot started");
 		bot.sendMessage(channelName, "Hello there");
 
-		var modes = settings.getStringSet(DiscordViewFactory.SETTING_MODES);
+		var modes = settings.getStringSet(SETTING_MODES);
 		if (modes.contains("logiled") && !modes.contains("alert")) {
 			bot.updatePresence(settings.getString("logiled.lighting.color"));
 		}
@@ -89,7 +104,7 @@ public class DiscordView implements Plugin {
 	private void registerBotCommands() {
 		bot.addCommand("logiled", new BotCommand((_, args) -> {
 			logger.info(() -> "Discord: Logiled");
-			if (!settings.getStringSet(DiscordViewFactory.SETTING_MODES).contains("alert")) {
+			if (!settings.getStringSet(SETTING_MODES).contains("alert")) {
 				eventManager.post(new CcEvent("LOGILED", args));
 				return true;
 			} else {
@@ -170,10 +185,10 @@ public class DiscordView implements Plugin {
 					CompletableFuture.runAsync(bot::updateCommands);
 					eventManager.echo("Updating discord slash commands");
 				} else if ("token".equals(command)) {
-					settings.persist(DiscordViewFactory.SETTING_TOKEN, join);
+					settings.persist(SETTING_TOKEN, join);
 					eventManager.echo("Discord Token updated");
 				} else if ("channel".equals(command)) {
-					settings.persist(DiscordViewFactory.SETTING_CHANNEL, join);
+					settings.persist(SETTING_CHANNEL, join);
 					channelName = join;
 					eventManager.echo("Bot notification channel updated");
 				}
@@ -192,6 +207,15 @@ public class DiscordView implements Plugin {
 				return commands;
 			}
 		}));
+	}
+
+	@Override
+	public Map<String, String> getSettingsContributions() {
+		Map<String, String> settings = new HashMap<>();
+		settings.put(SETTING_CHANNEL, "general");
+		settings.put(SETTING_TOKEN, StringUtils.EMPTY);
+		settings.put(SETTING_DISCORD_USERTAG, StringUtils.EMPTY);
+		return settings;
 	}
 
 }

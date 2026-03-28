@@ -11,7 +11,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 
-import dev.tim9h.rcp.discord.DiscordViewFactory;
+import dev.tim9h.rcp.discord.DiscordView;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.settings.Settings;
 import javafx.application.Platform;
@@ -44,9 +44,9 @@ public class DiscordBot {
 	public CompletableFuture<Boolean> login() {
 		return CompletableFuture.supplyAsync(() -> {
 			if (client == null) {
-				var token = settings.getString(DiscordViewFactory.SETTING_TOKEN);
-				client = JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
-						.build();
+				var token = settings.getString(DiscordView.SETTING_TOKEN);
+				client = JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES,
+						GatewayIntent.MESSAGE_CONTENT).build();
 				logger.info(() -> "Discord bot connected");
 				onBotConnected();
 				return Boolean.TRUE;
@@ -120,9 +120,10 @@ public class DiscordBot {
 
 	private boolean commandAllowed(String command, User user) {
 		var com = command.split(StringUtils.SPACE)[0];
-		return (commands.get(com) != null) &&
-				(settings.getStringSet(DiscordViewFactory.SETTING_DISCORD_USERTAG).contains(user.getName()) ||
-				!settings.getStringSet(DiscordViewFactory.SETTING_MODES).contains("dnd") && !commands.get(command).adminOnly());
+		return (commands.get(com) != null)
+				&& (settings.getStringSet(DiscordView.SETTING_DISCORD_USERTAG).contains(user.getName())
+						|| !settings.getStringSet(DiscordView.SETTING_MODES).contains("dnd")
+								&& !commands.get(command).adminOnly());
 	}
 
 	public void updateCommands() {

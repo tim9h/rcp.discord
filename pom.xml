@@ -33,7 +33,7 @@
 			<artifactId>JDA</artifactId>
 			<version>6.3.2</version>
 		</dependency>
-		
+
 	</dependencies>
 
 	<build>
@@ -75,6 +75,7 @@
 									<include>net.dv8tion:JDA</include>
 									<include>okhttp:OkHttp</include>
 									<include>com.squareup.okhttp3:okhttp</include>
+									<include>com.squareup.okhttp3:okhttp-jvm</include>
 									<include>org.apache.commons:commons-collections4</include>
 									<include>com.squareup.okio:okio</include>
 									<include>com.neovisionaries:nv-websocket-client</include>
