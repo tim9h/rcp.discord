@@ -14,13 +14,14 @@ import com.google.inject.Inject;
 
 import dev.tim9h.rcp.discord.bot.BotCommand;
 import dev.tim9h.rcp.discord.bot.DiscordBot;
-import dev.tim9h.rcp.event.CcEvent;
+import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.settings.Settings;
+import dev.tim9h.rcp.spi.CommandBuilder;
+import dev.tim9h.rcp.spi.CommandNode;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
-import dev.tim9h.rcp.spi.TreeNode;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 
@@ -105,7 +106,7 @@ public class DiscordView implements Plugin {
 		bot.addCommand("logiled", new BotCommand((_, args) -> {
 			logger.info(() -> "Discord: Logiled");
 			if (!settings.getStringSet(SETTING_MODES).contains("alert")) {
-				eventManager.post(new CcEvent("LOGILED", args));
+				eventManager.post(new Event("LOGILED", args));
 				return true;
 			} else {
 				return false;
@@ -115,43 +116,43 @@ public class DiscordView implements Plugin {
 
 		bot.addCommand("next", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Next song");
-			eventManager.post(new CcEvent("next"));
+			eventManager.post(new Event("next"));
 			return true;
 		}, "Plays next song"));
 
 		bot.addCommand("previous", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Previous song");
-			eventManager.post(new CcEvent("previous"));
+			eventManager.post(new Event("previous"));
 			return true;
 		}, "Plays previous song"));
 
 		bot.addCommand("play", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Play/pause");
-			eventManager.post(new CcEvent("play"));
+			eventManager.post(new Event("play"));
 			return true;
 		}, "Play/pause music"));
 
 		bot.addCommand("pause", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Play/pause");
-			eventManager.post(new CcEvent("pause"));
+			eventManager.post(new Event("pause"));
 			return true;
 		}, "Play/pause music"));
 
 		bot.addCommand("stop", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Stop");
-			eventManager.post(new CcEvent("stop"));
+			eventManager.post(new Event("stop"));
 			return true;
 		}, "Stops playing music"));
 
 		bot.addCommand("lock", new BotCommand((_, _) -> {
 			logger.info(() -> "Discord: Lock");
-			eventManager.post(new CcEvent("lock"));
+			eventManager.post(new Event("lock"));
 			return true;
 		}, "Lock workstation of host computer", true));
 
 		bot.addCommand("shutdown", new BotCommand((_, args) -> {
 			logger.info(() -> "Discord: Shutdown");
-			eventManager.post(new CcEvent("shutdown", args));
+			eventManager.post(new Event("shutdown", args));
 			return true;
 		}, "Shutdown host computer",
 				Arrays.asList(new OptionData(OptionType.STRING, "when", "Minutes/Hours/Time", false)), true));
@@ -179,19 +180,24 @@ public class DiscordView implements Plugin {
 			}
 
 			@Override
-			public void onCommand(String command, String... args) {
-				var join = StringUtils.join(args, StringUtils.SPACE);
-				if ("update".equals(command)) {
+			public Optional<CommandNode> getModeCommands() {
+				return new CommandBuilder().command("discord").child("update", _ -> {
 					CompletableFuture.runAsync(bot::updateCommands);
 					eventManager.echo("Updating discord slash commands");
-				} else if ("token".equals(command)) {
-					settings.persist(SETTING_TOKEN, join);
+				}).up().child("token", _ -> {
+					var token = settings.getString(SETTING_TOKEN);
+					eventManager.echo("Current bot token", token);
+				}).argumentAction(token -> {
+					settings.persist(SETTING_TOKEN, token);
 					eventManager.echo("Discord Token updated");
-				} else if ("channel".equals(command)) {
-					settings.persist(SETTING_CHANNEL, join);
-					channelName = join;
+				}).up().child("channel", _ -> {
+					var channel = settings.getString(SETTING_CHANNEL);
+					eventManager.echo("Current bot notification channel", channel);
+				}).argumentAction(channel -> {
+					settings.persist(SETTING_CHANNEL, channel);
+					channelName = channel;
 					eventManager.echo("Bot notification channel updated");
-				}
+				}).build();
 			}
 
 			@Override
@@ -199,23 +205,16 @@ public class DiscordView implements Plugin {
 				bot.sendMessage(channelName, "It's over").thenRun(bot::logout);
 				eventManager.echo("Discord bot disconnected");
 			}
-
-			@Override
-			public TreeNode<String> getCommandTree() {
-				var commands = Mode.super.getCommandTree();
-				commands.add("update", "token", "channel");
-				return commands;
-			}
 		}));
 	}
 
 	@Override
 	public Map<String, String> getSettingsContributions() {
-		Map<String, String> settings = new HashMap<>();
-		settings.put(SETTING_CHANNEL, "general");
-		settings.put(SETTING_TOKEN, StringUtils.EMPTY);
-		settings.put(SETTING_DISCORD_USERTAG, StringUtils.EMPTY);
-		return settings;
+		Map<String, String> contributions = new HashMap<>();
+		contributions.put(SETTING_CHANNEL, "general");
+		contributions.put(SETTING_TOKEN, StringUtils.EMPTY);
+		contributions.put(SETTING_DISCORD_USERTAG, StringUtils.EMPTY);
+		return contributions;
 	}
 
 }
