@@ -1,8 +1,11 @@
 package dev.tim9h.rcp.discord.bot;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
@@ -20,10 +23,8 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
-import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.internal.interactions.CommandDataImpl;
 
 @Singleton
@@ -31,22 +32,27 @@ public class DiscordBot {
 
 	private static final String ERROR_WHILE_WAITING_FOR_DISCORD_CLIENT = "Error while waiting for discord client";
 
+	private static final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+		var thread = new Thread(r, "discord-bot");
+		thread.setDaemon(true);
+		return thread;
+	});
+
 	@Inject
 	private Settings settings;
 
 	@InjectLogger
 	private Logger logger;
 
-	private JDA client;
+	private volatile JDA client;
 
-	private Map<String, BotCommand> commands;
+	private final Map<String, BotCommand> commands = new ConcurrentHashMap<>();
 
 	public CompletableFuture<Boolean> login() {
 		return CompletableFuture.supplyAsync(() -> {
 			if (client == null) {
 				var token = settings.getString(DiscordView.SETTING_TOKEN);
-				client = JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES,
-						GatewayIntent.MESSAGE_CONTENT).build();
+				client = JDABuilder.createLight(token).build();
 				logger.info(() -> "Discord bot connected");
 				onBotConnected();
 				return Boolean.TRUE;
@@ -54,7 +60,7 @@ public class DiscordBot {
 				logger.warn(() -> "Discord bot already connected");
 				return Boolean.TRUE;
 			}
-		}).exceptionally(ex -> {
+		}, executor).exceptionally(ex -> {
 			logger.error(() -> "Error during discord login: " + ex.getMessage(), ex);
 			return Boolean.FALSE;
 		});
@@ -63,34 +69,10 @@ public class DiscordBot {
 	private void onBotConnected() {
 		client.addEventListener(new ListenerAdapter() {
 			@Override
-			public void onMessageReceived(MessageReceivedEvent event) {
-				handleMessageReceived(event);
-			}
-
-			@Override
 			public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
 				handleSlashCommand(event);
 			}
 		});
-	}
-
-	private void handleMessageReceived(MessageReceivedEvent event) {
-		String content = event.getMessage().getContentRaw();
-		if (content.startsWith("!") && commandAllowed(content.substring(1), event.getAuthor())) {
-			var channel = event.getChannel().getName();
-			var contentStripped = content.substring(1).trim();
-			var split = contentStripped.split(" ");
-			var commandName = split[0];
-			var args = split.length > 1 ? contentStripped.replace(commandName, StringUtils.EMPTY).trim() : null;
-
-			if (commands.containsKey(commandName)) {
-				BotCommand command = commands.get(commandName);
-				Platform.runLater(() -> command.action().test(channel, args));
-			}
-		} else {
-			logger.warn(() -> "Ignoring command " + event.getMessage().getContentRaw() + " by user "
-					+ event.getAuthor().getName());
-		}
 	}
 
 	private void handleSlashCommand(SlashCommandInteractionEvent event) {
@@ -120,27 +102,32 @@ public class DiscordBot {
 
 	private boolean commandAllowed(String command, User user) {
 		var com = command.split(StringUtils.SPACE)[0];
-		return (commands.get(com) != null)
-				&& (settings.getStringSet(DiscordView.SETTING_DISCORD_USERTAG).contains(user.getName())
-						|| !settings.getStringSet(DiscordView.SETTING_MODES).contains("dnd")
-								&& !commands.get(command).adminOnly());
+		var botCommand = commands.get(com);
+		return botCommand != null && (settings.getStringSet(DiscordView.SETTING_DISCORD_USERTAG)
+				.contains(user.getName())
+				|| !settings.getStringSet(DiscordView.SETTING_MODES).contains("dnd") && !botCommand.adminOnly());
 	}
 
-	public void updateCommands() {
-		logger.info(() -> "Deleting all commands");
-		client.retrieveCommands().complete()
-				.forEach(oldCommand -> client.deleteCommandById(oldCommand.getId()).queue());
-
-		// registers slash commands with description. can take up to an hour
-		commands.entrySet().stream().filter(entry -> entry.getValue().description() != null).forEach(entry -> {
-			logger.info(
-					() -> String.format("Upserting command %s: %s", entry.getKey(), entry.getValue().description()));
-			var command = new CommandDataImpl(entry.getKey(), entry.getValue().description());
-			if (entry.getValue().options() != null) {
-				command.addOptions(entry.getValue().options());
+	public CompletableFuture<Void> updateCommands() {
+		return CompletableFuture.runAsync(() -> {
+			var jda = client;
+			if (jda == null) {
+				logger.error(() -> "Unable to update commands: client not initialized");
+				return;
 			}
-			client.upsertCommand(command).queue();
-		});
+			// registers slash commands with description. can take up to an hour
+			var data = commands.entrySet().stream().filter(entry -> entry.getValue().description() != null)
+					.map(entry -> {
+						logger.info(() -> String.format("Upserting command %s: %s", entry.getKey(),
+								entry.getValue().description()));
+						var command = new CommandDataImpl(entry.getKey(), entry.getValue().description());
+						if (entry.getValue().options() != null) {
+							command.addOptions(entry.getValue().options());
+						}
+						return command;
+					}).toList();
+			jda.updateCommands().addCommands(data).queue();
+		}, executor);
 	}
 
 	public boolean isLoggedIn() {
@@ -148,19 +135,21 @@ public class DiscordBot {
 	}
 
 	public void addCommand(String commandName, BotCommand command) {
-		if (commands == null) {
-			commands = new HashMap<>();
-		}
 		commands.putIfAbsent(commandName, command);
 	}
 
 	public CompletableFuture<Void> sendMessage(String channelName, String message) {
 		return CompletableFuture.runAsync(() -> {
-			if (client != null) {
+			var jda = client;
+			if (jda != null) {
 				try {
-					client.awaitReady();
-					var channel = client.getTextChannelsByName(channelName, true).get(0);
-					channel.sendMessage(message).complete();
+					jda.awaitReady();
+					var channels = jda.getTextChannelsByName(channelName, true);
+					if (channels.isEmpty()) {
+						logger.warn(() -> "Discord channel not found: " + channelName);
+						return;
+					}
+					channels.get(0).sendMessage(message).complete();
 				} catch (InterruptedException e) {
 					logger.error(() -> ERROR_WHILE_WAITING_FOR_DISCORD_CLIENT, e);
 					Thread.currentThread().interrupt();
@@ -168,46 +157,60 @@ public class DiscordBot {
 			} else {
 				logger.error(() -> "Unable to send message to discord channel: client not initialized");
 			}
-		});
+		}, executor);
 	}
 
 	public CompletableFuture<Void> logout() {
-		return CompletableFuture.runAsync(() -> {
-			if (client != null) {
-				client.shutdownNow();
-				logger.info(() -> "Discord bot disconnected: " + client.getStatus().toString());
-				client = null;
-			} else {
-				logger.warn(() -> "Discord bot not connected");
-			}
-		});
+		return CompletableFuture.runAsync(this::disconnect, executor);
+	}
+
+	private void disconnect() {
+		var jda = client;
+		if (jda != null) {
+			jda.shutdownNow();
+			logger.info(() -> "Discord bot disconnected: " + jda.getStatus());
+			client = null;
+		} else {
+			logger.warn(() -> "Discord bot not connected");
+		}
+	}
+
+	/**
+	 * Sends a farewell message and disconnects, waiting at most a few seconds.
+	 */
+	public void shutdown(String channelName, String message) {
+		if (client == null) {
+			return;
+		}
+		try {
+			sendMessage(channelName, message).orTimeout(3, TimeUnit.SECONDS).join();
+		} catch (Exception e) {
+			logger.warn(() -> "Unable to send farewell message: " + e.getMessage());
+		} finally {
+			disconnect();
+		}
 	}
 
 	public void updatePresence(String message) {
-		if (client != null) {
-			try {
-				client.awaitReady();
-				var activity = Activity.playing("in " + message);
-				client.getPresence().setActivity(message == null ? null : activity);
-			} catch (InterruptedException e) {
-				logger.error(() -> ERROR_WHILE_WAITING_FOR_DISCORD_CLIENT, e);
-				Thread.currentThread().interrupt();
+		CompletableFuture.runAsync(() -> {
+			var jda = client;
+			if (jda != null) {
+				try {
+					jda.awaitReady();
+					jda.getPresence().setActivity(message == null ? null : Activity.playing("in " + message));
+				} catch (InterruptedException e) {
+					logger.error(() -> ERROR_WHILE_WAITING_FOR_DISCORD_CLIENT, e);
+					Thread.currentThread().interrupt();
+				}
 			}
-		}
+		}, executor).exceptionally(ex -> {
+			logger.error(() -> "Unable to update presence: " + ex.getMessage(), ex);
+			return null;
+		});
 	}
 
 	public void disablePresence() {
-		if (client != null) {
-			try {
-				client.awaitReady();
-				client.getPresence().setActivity(null);
-			} catch (InterruptedException e) {
-				logger.error(() -> ERROR_WHILE_WAITING_FOR_DISCORD_CLIENT, e);
-				Thread.currentThread().interrupt();
-			}
-		} else {
-			logger.error(() -> "Unable to disable presence: client not initialized");
-		}
+		updatePresence(null);
 	}
 
 }

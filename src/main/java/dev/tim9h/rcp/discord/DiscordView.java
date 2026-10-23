@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
@@ -22,6 +21,7 @@ import dev.tim9h.rcp.spi.CommandBuilder;
 import dev.tim9h.rcp.spi.CommandNode;
 import dev.tim9h.rcp.spi.Mode;
 import dev.tim9h.rcp.spi.Plugin;
+import javafx.application.Platform;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 
@@ -63,6 +63,7 @@ public class DiscordView implements Plugin {
 	public void init() {
 		logger.info(() -> "Created DiscordView");
 		channelName = settings.getString(SETTING_CHANNEL);
+		registerBotCommands();
 	}
 
 	@Override
@@ -79,14 +80,13 @@ public class DiscordView implements Plugin {
 	private void connectDiscordBot() {
 		if (!bot.isLoggedIn()) {
 			eventManager.showWaitingIndicator();
-			registerBotCommands();
-			bot.login().thenAccept(loginSuccess -> {
+			bot.login().thenAccept(loginSuccess -> Platform.runLater(() -> {
 				if (loginSuccess.booleanValue()) {
 					onBotConnected();
 				} else {
 					eventManager.echo("Unable to start Discord Bot");
 				}
-			});
+			}));
 		} else {
 			eventManager.echo(StringUtils.EMPTY, "Discord bot already started");
 		}
@@ -182,7 +182,7 @@ public class DiscordView implements Plugin {
 			@Override
 			public Optional<CommandNode> getModeCommands() {
 				return new CommandBuilder().command("discord").child("update", _ -> {
-					CompletableFuture.runAsync(bot::updateCommands);
+					bot.updateCommands();
 					eventManager.echo("Updating discord slash commands");
 				}).up().child("token", _ -> {
 					var token = settings.getString(SETTING_TOKEN);
