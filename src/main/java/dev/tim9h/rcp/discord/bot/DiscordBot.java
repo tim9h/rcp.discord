@@ -16,6 +16,7 @@ import com.google.inject.Singleton;
 
 import dev.tim9h.rcp.discord.DiscordView;
 import dev.tim9h.rcp.logging.InjectLogger;
+import dev.tim9h.rcp.service.ModeService;
 import dev.tim9h.rcp.settings.Settings;
 import javafx.application.Platform;
 import net.dv8tion.jda.api.JDA;
@@ -40,6 +41,9 @@ public class DiscordBot {
 
 	@Inject
 	private Settings settings;
+
+	@Inject
+	private ModeService modeService;
 
 	@InjectLogger
 	private Logger logger;
@@ -103,9 +107,9 @@ public class DiscordBot {
 	private boolean commandAllowed(String command, User user) {
 		var com = command.split(StringUtils.SPACE)[0];
 		var botCommand = commands.get(com);
-		return botCommand != null && (settings.getStringSet(DiscordView.SETTING_DISCORD_USERTAG)
-				.contains(user.getName())
-				|| !settings.getStringSet(DiscordView.SETTING_MODES).contains("dnd") && !botCommand.adminOnly());
+		return botCommand != null
+				&& (settings.getStringSet(DiscordView.SETTING_DISCORD_USERTAG).contains(user.getName())
+						|| !modeService.isModeActive("dnd") && !botCommand.adminOnly());
 	}
 
 	public CompletableFuture<Void> updateCommands() {
