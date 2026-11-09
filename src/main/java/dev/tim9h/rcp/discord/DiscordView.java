@@ -16,6 +16,7 @@ import dev.tim9h.rcp.discord.bot.DiscordBot;
 import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
+import dev.tim9h.rcp.service.ModeService;
 import dev.tim9h.rcp.settings.Settings;
 import dev.tim9h.rcp.spi.CommandBuilder;
 import dev.tim9h.rcp.spi.CommandNode;
@@ -33,8 +34,6 @@ public class DiscordView implements Plugin {
 
 	public static final String SETTING_DISCORD_USERTAG = "discord.privileged.user.tag";
 
-	public static final String SETTING_MODES = "core.modes";
-
 	@InjectLogger
 	private Logger logger;
 
@@ -48,6 +47,9 @@ public class DiscordView implements Plugin {
 
 	@Inject
 	private Settings settings;
+
+	@Inject
+	private ModeService modeService;
 
 	@Override
 	public String getName() {
@@ -95,9 +97,7 @@ public class DiscordView implements Plugin {
 	private void onBotConnected() {
 		eventManager.echo("Discord bot started");
 		bot.sendMessage(channelName, "Hello there");
-
-		var modes = settings.getStringSet(SETTING_MODES);
-		if (modes.contains("logiled") && !modes.contains("alert")) {
+		if (modeService.isModeActive("logiled")) {
 			bot.updatePresence(settings.getString("logiled.lighting.color"));
 		}
 	}
@@ -105,12 +105,8 @@ public class DiscordView implements Plugin {
 	private void registerBotCommands() {
 		bot.addCommand("logiled", new BotCommand((_, args) -> {
 			logger.info(() -> "Discord: Logiled");
-			if (!settings.getStringSet(SETTING_MODES).contains("alert")) {
-				eventManager.post(new Event("LOGILED", args));
-				return true;
-			} else {
-				return false;
-			}
+			eventManager.post(new Event("LOGILED", args));
+			return true;
 		}, "Sets the lighting of Logitech periphery",
 				Arrays.asList(new OptionData(OptionType.STRING, "color", "name/hex/rgb", true))));
 
