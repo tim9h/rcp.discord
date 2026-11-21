@@ -3,9 +3,11 @@ package dev.tim9h.rcp.discord.bot;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
@@ -32,6 +34,10 @@ import net.dv8tion.jda.internal.interactions.CommandDataImpl;
 public class DiscordBot {
 
 	private static final String ERROR_WHILE_WAITING_FOR_DISCORD_CLIENT = "Error while waiting for discord client";
+
+	private static final long SHUTDOWN_TIMEOUT_SECONDS = 5;
+
+	private static final long FAREWELL_TIMEOUT_SECONDS = 3;
 
 	private static final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
 		var thread = new Thread(r, "discord-bot");
@@ -169,30 +175,82 @@ public class DiscordBot {
 	}
 
 	private void disconnect() {
-		var jda = client;
+		var jda = detachClient();
 		if (jda != null) {
-			jda.shutdownNow();
-			logger.info(() -> "Discord bot disconnected: " + jda.getStatus());
-			client = null;
+			shutdownClient(jda);
 		} else {
 			logger.warn(() -> "Discord bot not connected");
 		}
 	}
 
+	private synchronized JDA detachClient() {
+		var jda = client;
+		client = null;
+		return jda;
+	}
+
+	private void shutdownClient(JDA jda) {
+		jda.shutdown();
+		try {
+			if (!jda.awaitShutdown(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+				logger.warn(() -> "Discord bot is still shutting down after the timeout");
+			} else {
+				logger.info(() -> "Discord bot disconnected: " + jda.getStatus());
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			logger.warn(() -> "Interrupted while waiting for Discord bot shutdown", e);
+		}
+	}
+
 	/**
-	 * Sends a farewell message and disconnects, waiting at most a few seconds.
+	 * Gracefully shuts down JDA.
 	 */
-	public void shutdown(String channelName, String message) {
-		if (client == null) {
+	public void shutdown() {
+		var jda = detachClient();
+		if (jda == null) {
 			return;
 		}
+		shutdownClient(jda);
+	}
+
+	public void shutdown(String channelName, String farewellMessage) {
+		var jda = detachClient();
+		if (jda == null) {
+			return;
+		}
+
+		CompletableFuture<?> farewellRequest = null;
 		try {
-			sendMessage(channelName, message).orTimeout(3, TimeUnit.SECONDS).join();
-		} catch (Exception e) {
+			if (StringUtils.isNotBlank(farewellMessage) && jda.getStatus() == JDA.Status.CONNECTED) {
+				var channels = jda.getTextChannelsByName(channelName, true);
+				if (channels.isEmpty()) {
+					logger.warn(() -> "Discord channel not found: " + channelName);
+				} else {
+					farewellRequest = channels.get(0).sendMessage(farewellMessage).submit();
+					farewellRequest.get(FAREWELL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+				}
+			}
+		} catch (TimeoutException _) {
+			if (farewellRequest != null) {
+				farewellRequest.cancel(true);
+			}
+			logger.warn(() -> "Timed out sending Discord farewell message");
+		} catch (InterruptedException e) {
+			if (farewellRequest != null) {
+				farewellRequest.cancel(true);
+			}
+			Thread.currentThread().interrupt();
+			logger.warn(() -> "Interrupted while sending Discord farewell message", e);
+		} catch (ExecutionException | RuntimeException e) {
 			logger.warn(() -> "Unable to send farewell message: " + e.getMessage());
 		} finally {
-			disconnect();
+			shutdownClient(jda);
 		}
+	}
+
+	public CompletableFuture<Void> shutdownAsync() {
+		return CompletableFuture.runAsync(this::shutdown);
 	}
 
 	public void updatePresence(String message) {

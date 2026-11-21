@@ -17,6 +17,7 @@ import dev.tim9h.rcp.event.Event;
 import dev.tim9h.rcp.event.EventManager;
 import dev.tim9h.rcp.logging.InjectLogger;
 import dev.tim9h.rcp.service.ModeService;
+import dev.tim9h.rcp.settings.Setting;
 import dev.tim9h.rcp.settings.Settings;
 import dev.tim9h.rcp.spi.CommandBuilder;
 import dev.tim9h.rcp.spi.CommandNode;
@@ -34,6 +35,10 @@ public class DiscordView implements Plugin {
 
 	public static final String SETTING_DISCORD_USERTAG = "discord.privileged.user.tag";
 
+	private static final String SETTING_DISCORD_BOT_WELCOME_MESSAGE = "discord.bot.welcomemessage";
+
+	private static final String SETTING_DISCORD_BOT_FAREWELL_MESSAGE = "discord.bot.farewellmessage";
+
 	@InjectLogger
 	private Logger logger;
 
@@ -43,7 +48,7 @@ public class DiscordView implements Plugin {
 	@Inject
 	private EventManager eventManager;
 
-	private String channelName;
+	private Setting<String> channelName;
 
 	@Inject
 	private Settings settings;
@@ -64,7 +69,7 @@ public class DiscordView implements Plugin {
 	@Override
 	public void init() {
 		logger.info(() -> "Created DiscordView");
-		channelName = settings.getString(SETTING_CHANNEL);
+		channelName = new Setting<>(settings, eventManager, SETTING_CHANNEL, "");
 		registerBotCommands();
 	}
 
@@ -72,11 +77,6 @@ public class DiscordView implements Plugin {
 	public void initBus(EventManager em) {
 		Plugin.super.initBus(eventManager);
 		em.listen("LOGILED_LIGHTING_CHANGED", color -> bot.updatePresence(StringUtils.join(color)));
-	}
-
-	@Override
-	public void onSettingsChanged() {
-		channelName = settings.getString(SETTING_CHANNEL);
 	}
 
 	private void connectDiscordBot() {
@@ -96,7 +96,10 @@ public class DiscordView implements Plugin {
 
 	private void onBotConnected() {
 		eventManager.echo("Discord bot started");
-		bot.sendMessage(channelName, "Hello there");
+		var welcomeMessage = settings.getString(SETTING_DISCORD_BOT_WELCOME_MESSAGE);
+		if (!welcomeMessage.isBlank()) {
+			bot.sendMessage(channelName.get(), welcomeMessage);
+		}
 		if (modeService.isModeActive("logiled")) {
 			bot.updatePresence(settings.getString("logiled.lighting.color"));
 		}
@@ -156,9 +159,8 @@ public class DiscordView implements Plugin {
 
 	@Override
 	public void onShutdown() {
-		if (bot.isLoggedIn()) {
-			bot.sendMessage(channelName, "It's over").thenRun(bot::logout);
-		}
+		var farewellMessage = settings.getString(SETTING_DISCORD_BOT_FAREWELL_MESSAGE);
+		bot.shutdown(channelName.get(), farewellMessage);
 	}
 
 	@Override
@@ -191,15 +193,18 @@ public class DiscordView implements Plugin {
 					eventManager.echo("Current bot notification channel", channel);
 				}).argumentAction(channel -> {
 					settings.persist(SETTING_CHANNEL, channel);
-					channelName = channel;
 					eventManager.echo("Bot notification channel updated");
 				}).build();
 			}
 
 			@Override
 			public void onDisable() {
-				bot.sendMessage(channelName, "It's over").thenRun(bot::logout);
-				eventManager.echo("Discord bot disconnected");
+				bot.shutdownAsync().whenComplete((_, error) -> Platform.runLater(() -> {
+					if (error != null) {
+						logger.warn(() -> "Unable to shut down Discord bot", error);
+					}
+					eventManager.echo("Discord bot disconnected");
+				}));
 			}
 		}));
 	}
@@ -210,6 +215,8 @@ public class DiscordView implements Plugin {
 		contributions.put(SETTING_CHANNEL, "general");
 		contributions.put(SETTING_TOKEN, StringUtils.EMPTY);
 		contributions.put(SETTING_DISCORD_USERTAG, StringUtils.EMPTY);
+		contributions.put(SETTING_DISCORD_BOT_WELCOME_MESSAGE, "Bot connected");
+		contributions.put(SETTING_DISCORD_BOT_FAREWELL_MESSAGE, "Bot disconnecting");
 		return contributions;
 	}
 
